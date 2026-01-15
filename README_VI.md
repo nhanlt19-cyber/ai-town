@@ -390,9 +390,42 @@ CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key-vừa-tạo>"
 
 **Lưu ý**: Lệnh `npx convex env set` cần chạy từ thư mục có `package.json`, không thể chạy từ trong container backend.
 
-#### Cách 1: Set từ host (Khuyến nghị)
+#### Cách 1: Set qua Convex Dashboard (Khuyến nghị - Dễ nhất)
 
-1. **Cấu hình Convex CLI để kết nối với self-hosted backend**:
+Đây là cách đơn giản nhất và không gặp lỗi với Node.js version:
+
+1. **Truy cập Dashboard**:
+   - Mở trình duyệt và vào: `http://10.0.12.81:6791`
+   - Đăng nhập với admin key đã tạo ở bước 4
+
+2. **Thêm Environment Variable**:
+   - Tìm phần **"Environment Variables"** hoặc **"Settings"** → **"Environment"**
+   - Click **"Add Variable"** hoặc **"New Variable"**
+   - Nhập:
+     - **Key**: `OLLAMA_HOST`
+     - **Value**: `http://host.docker.internal:11434` hoặc `http://10.0.12.81:11434`
+   - Click **"Save"** hoặc **"Add"**
+
+3. **Kiểm tra**:
+   - Biến môi trường sẽ xuất hiện trong danh sách
+   - Backend sẽ tự động reload và sử dụng biến mới
+
+#### Cách 2: Set từ host bằng Convex CLI
+
+**Lưu ý**: Nếu gặp lỗi `ReferenceError: File is not defined`, hãy sử dụng Cách 1 (Dashboard) hoặc Cách 3 (API).
+
+1. **Cài đặt Convex CLI globally** (khuyến nghị):
+
+```bash
+# Cài đặt Convex CLI globally
+npm install -g convex
+
+# Hoặc cập nhật Node.js lên version 20+ nếu đang dùng v18
+# nvm install 20
+# nvm use 20
+```
+
+2. **Cấu hình Convex CLI để kết nối với self-hosted backend**:
 
 ```bash
 cd ~/ai-town
@@ -408,19 +441,34 @@ CONVEX_SELF_HOSTED_URL=http://10.0.12.81:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key-đã-tạo-ở-bước-4>"
 ```
 
-2. **Set OLLAMA_HOST từ host**:
+3. **Set OLLAMA_HOST**:
 
 ```bash
 cd ~/ai-town
 
 # Set OLLAMA_HOST (sử dụng host.docker.internal nếu đã cấu hình extra_hosts)
-npx convex env set OLLAMA_HOST http://host.docker.internal:11434
+convex env set OLLAMA_HOST http://host.docker.internal:11434
 
 # HOẶC sử dụng IP trực tiếp (nếu host.docker.internal không hoạt động)
-npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+convex env set OLLAMA_HOST http://10.0.12.81:11434
 ```
 
-#### Cách 2: Set qua Convex Dashboard
+#### Cách 3: Set qua API (Nếu CLI không hoạt động)
+
+Nếu cả Dashboard và CLI đều không hoạt động, bạn có thể set environment variable qua API:
+
+```bash
+# Lấy admin key từ .env.local hoặc từ bước 4
+ADMIN_KEY="<admin-key-của-bạn>"
+
+# Set OLLAMA_HOST qua HTTP API
+curl -X POST "http://10.0.12.81:3210/api/environmentVariables" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "OLLAMA_HOST", "value": "http://10.0.12.81:11434"}'
+```
+
+**Lưu ý**: Cách này yêu cầu biết chính xác API endpoint của Convex self-hosted. Cách đơn giản nhất vẫn là sử dụng **Dashboard** (Cách 1).
 
 1. Truy cập dashboard: `http://10.0.12.81:6791`
 2. Đăng nhập với admin key
@@ -461,15 +509,221 @@ docker compose exec backend curl http://10.0.12.81:11434
 
 ### 6. Khởi tạo database
 
+**⚠️ Lưu ý quan trọng**: Convex CLI yêu cầu **Node.js v20+**. Nếu bạn đang dùng Node.js v18, bạn có 2 lựa chọn:
+
+#### Cách 1: Chạy init function qua Dashboard (Khuyến nghị - Không cần CLI)
+
+1. **Truy cập Dashboard**:
+   - Mở trình duyệt: `http://10.0.12.81:6791`
+   - Đăng nhập với admin key
+
+2. **Chạy init function**:
+   - Vào tab **"Functions"** hoặc **"Run Function"**
+   - Tìm function `init` trong danh sách
+   - Click vào function `init`
+   - Click **"Run"** hoặc **"Execute"**
+   - Function sẽ chạy và khởi tạo database, tạo world, và tạo agents
+
+3. **Kiểm tra kết quả**:
+   - Vào tab **"Data"** → **"Tables"**
+   - Kiểm tra các bảng `worlds`, `worldStatus`, `maps` đã có dữ liệu chưa
+
+#### Cách 2: Cài Node.js 20+ và dùng CLI
+
+Nếu bạn muốn dùng CLI, cần cài Node.js 20+ trước:
+
+```bash
+# Cài đặt nvm (nếu chưa có)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+source ~/.bashrc
+
+# Cài Node.js 20
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+# Kiểm tra version
+node --version  # Nên là v20.x.x
+
+# Cài lại Convex CLI
+npm install -g convex
+
+# Khởi tạo database
+cd ~/ai-town
+convex dev --run init --until-success
+```
+
+**Hoặc cài Node.js 20 trực tiếp không dùng nvm**:
+
+```bash
+# Cài Node.js 20 từ NodeSource
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Kiểm tra
+node --version  # Nên là v20.x.x
+
+# Cài Convex CLI
+npm install -g convex
+
+# Khởi tạo database
+cd ~/ai-town
+convex dev --run init --until-success
+```
+
+#### Cách 3: Chạy init function qua API (Nếu Dashboard không có chức năng Run)
+
+Nếu Dashboard không có chức năng chạy function, bạn có thể gọi qua API:
+
+```bash
+# Lấy admin key
+ADMIN_KEY="<admin-key-của-bạn>"
+
+# Gọi init function qua HTTP API
+curl -X POST "http://10.0.12.81:3210/api/mutation/init" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Lưu ý**: Cách đơn giản nhất là sử dụng **Dashboard** (Cách 1) - không cần cài Node.js 20, không cần CLI.
+
+#### Cách 4: Cài dependencies trước khi dùng CLI
+
+Nếu bạn gặp lỗi "Could not resolve 'convex/server'" khi dùng CLI, cần cài dependencies trước:
+
 ```bash
 cd ~/ai-town
 
-# Đảm bảo đã có .env.local với CONVEX_SELF_HOSTED_URL và CONVEX_SELF_HOSTED_ADMIN_KEY
-# Chạy lệnh init để khởi tạo database
-npx convex dev --run init --until-success
+# Cài dependencies (quan trọng!)
+npm install
+
+# Sau đó mới có thể dùng CLI
+# (Nhưng vẫn cần Node.js 20+)
 ```
 
-### 7. Kiểm tra các services đang chạy
+**Lưu ý**: Ngay cả khi đã cài dependencies, bạn vẫn cần Node.js 20+ để dùng Convex CLI. Cách tốt nhất vẫn là dùng **Dashboard**.
+
+### 7. Các Lệnh Cần Thiết để Start Hệ Thống
+
+Sau khi đã cấu hình xong, đây là **tất cả các lệnh cần chạy** để start hệ thống:
+
+#### Bước 1: Start Docker Services (Nếu chưa chạy)
+
+```bash
+cd ~/ai-town
+docker compose up -d
+```
+
+#### Bước 2: Chạy Init Function (QUAN TRỌNG - Chỉ cần chạy 1 lần)
+
+**Qua Dashboard** (Khuyến nghị):
+1. Truy cập: `http://10.0.12.81:6791`
+2. Đăng nhập với admin key
+3. Vào **Functions** → `init` → **Run**
+
+**Hoặc qua API**:
+```bash
+ADMIN_KEY="<admin-key>"
+curl -X POST "http://10.0.12.81:3210/api/mutation/init" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**⚠️ Nếu gặp cảnh báo "Engine is not active!"**:
+
+Nếu khi chạy init bạn thấy cảnh báo:
+```
+warn: 'Engine ... is not active! Run "npx convex run testing:resume" to restart it.'
+```
+
+Điều này có nghĩa là engine chưa được start. Bạn cần:
+
+1. **Chạy resume trước** (qua Dashboard):
+   - Functions → `testing:resume` → **Run**
+   - Đợi vài giây
+
+2. **Sau đó chạy init lại**:
+   - Functions → `init` → **Run**
+
+**Hoặc thứ tự đúng là**:
+1. Chạy `testing:resume` trước để start engine
+2. Sau đó chạy `init` để tạo agents
+
+**Lưu ý**: 
+- ✅ **Init function sẽ tự động start game engine** - nhưng chỉ khi worldStatus đã là "running"
+- ✅ **Nếu worldStatus không phải "running", cần chạy resume trước**
+- ✅ **Chỉ cần chạy 1 lần khi lần đầu setup**
+- ✅ **Nếu đã chạy init rồi, không cần chạy lại** (trừ khi reset database)
+
+#### Bước 3: Kiểm tra WorldStatus
+
+Trong Dashboard → Data → `worldStatus`:
+- Phải có `status` = `"running"`
+- Nếu không phải "running", xem bước 4
+
+#### Bước 4: Resume Engine (Nếu worldStatus không phải "running")
+
+**Qua Dashboard**:
+- Functions → `testing:resume` → **Run**
+
+**Hoặc qua API**:
+```bash
+curl -X POST "http://10.0.12.81:3210/api/mutation/testing:resume" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Bước 5: Kick Engine (Nếu engine không chạy)
+
+Nếu sau khi resume mà engine vẫn không chạy:
+
+**Qua Dashboard**:
+- Functions → `testing:kick` → **Run**
+
+**Hoặc qua API**:
+```bash
+curl -X POST "http://10.0.12.81:3210/api/mutation/testing:kick" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Tóm Tắt: Các Lệnh Start/Stop/Resume
+
+| Lệnh | Mô tả | Khi nào dùng |
+|------|-------|--------------|
+| `init` | Khởi tạo database, tạo world, tạo agents | Chỉ 1 lần khi setup lần đầu |
+| `testing:resume` | Resume engine nếu bị dừng | Khi worldStatus là "inactive" hoặc "stoppedByDeveloper" |
+| `testing:kick` | Khởi động lại engine | Khi engine không chạy hoặc bị treo |
+| `testing:stop` | Dừng engine | Khi muốn tạm dừng simulation |
+| `testing:wipeAllTables` | Xóa toàn bộ dữ liệu | Khi muốn reset hoàn toàn |
+
+**Lưu ý quan trọng**:
+- ✅ **Sau khi chạy init, game engine sẽ tự động start** - không cần chạy lệnh start riêng
+- ✅ **Nếu worldStatus đã là "running", engine đang chạy** - không cần làm gì thêm
+- ✅ **Chỉ cần chạy resume/kick nếu worldStatus không phải "running"**
+
+### 8. Checklist: Đảm Bảo Game Hoạt Động
+
+Trước khi truy cập giao diện game, đảm bảo đã hoàn thành các bước sau:
+
+- [ ] ✅ **Docker containers đang chạy**: `docker compose ps` (phải thấy frontend, backend, dashboard đều "Up")
+- [ ] ✅ **Ollama đang chạy**: `curl http://localhost:11434` (phải trả về "Ollama is running")
+- [ ] ✅ **Admin key đã được tạo**: Đã chạy `docker compose exec backend ./generate_admin_key.sh`
+- [ ] ✅ **OLLAMA_HOST đã được set**: Trong Dashboard → Settings → Environment Variables
+- [ ] ✅ **Init function đã chạy**: Trong Dashboard → Functions → `init` → Run (QUAN TRỌNG!)
+- [ ] ✅ **WorldStatus là "running"**: Trong Dashboard → Data → `worldStatus` → status phải là "running"
+- [ ] ✅ **Có dữ liệu trong worlds**: Trong Dashboard → Data → `worlds` → phải có ít nhất 1 document
+- [ ] ✅ **Có dữ liệu trong maps**: Trong Dashboard → Data → `maps` → phải có map data
+
+**Nếu giao diện game không hiển thị gì**, xem phần [Troubleshooting Giao Diện](#troubleshooting-giao-diện) bên dưới.
+
+### 8. Kiểm tra các services đang chạy
 
 ```bash
 # Xem trạng thái containers
@@ -792,16 +1046,231 @@ Bạn có thể xem các agents hoạt động mà không cần đăng nhập:
 
 ### Troubleshooting Giao Diện:
 
-**Không thấy agents**:
-- Đợi vài giây để simulation khởi động
-- Refresh trang nếu cần
-- Kiểm tra logs backend
+#### Giao Diện Không Hiển Thị Gì Cả (Màn Hình Trống)
 
-**Không thể di chuyển**:
+**Nguyên nhân phổ biến nhất**: Database chưa được khởi tạo (chưa chạy init function).
+
+**Các bước kiểm tra và sửa**:
+
+1. **Kiểm tra database đã được khởi tạo chưa**:
+
+   - Truy cập Dashboard: `http://10.0.12.81:6791`
+   - Đăng nhập với admin key
+   - Vào tab **"Data"** → **"Tables"**
+   - Kiểm tra các bảng sau có dữ liệu chưa:
+     - `worlds` - Phải có ít nhất 1 document
+     - `worldStatus` - Phải có status là `"running"`
+     - `maps` - Phải có map data
+     - `agentDescriptions` - Phải có descriptions của agents
+
+2. **Nếu các bảng trống, cần chạy init function**:
+
+   **Cách 1: Qua Dashboard (Khuyến nghị)**:
+   - Vào tab **"Functions"**
+   - Tìm function `init`
+   - Click **"Run"** hoặc **"Execute"**
+   - Đợi function chạy xong (có thể mất vài giây)
+   - Refresh trang game
+
+   **Cách 2: Qua API** (nếu Dashboard không có chức năng Run):
+   ```bash
+   ADMIN_KEY="<admin-key-của-bạn>"
+   curl -X POST "http://10.0.12.81:3210/api/mutation/init" \
+     -H "Authorization: Bearer $ADMIN_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+   ```
+
+3. **Kiểm tra worldStatus phải là "running"**:
+
+   - Trong Dashboard, vào `worldStatus` table
+   - Đảm bảo `status` là `"running"` (không phải `"inactive"` hoặc `"stoppedByDeveloper"`)
+   - Nếu không phải `"running"`, cần resume:
+     - Vào Functions → tìm `testing:resume` → Run
+
+4. **Kiểm tra frontend kết nối được với backend**:
+
+   - Mở Developer Tools trong trình duyệt (F12)
+   - Vào tab **Console**
+   - Kiểm tra có lỗi kết nối không
+   - Kiểm tra tab **Network** xem có request nào fail không
+
+5. **Kiểm tra logs backend**:
+
+   ```bash
+   docker compose logs -f backend | tail -50
+   ```
+   - Tìm lỗi liên quan đến init, world, hoặc agents
+
+6. **Kiểm tra OLLAMA_HOST đã được set chưa**:
+
+   - Trong Dashboard, vào **Settings** → **Environment Variables**
+   - Đảm bảo có biến `OLLAMA_HOST` với giá trị `http://10.0.12.81:11434` hoặc `http://host.docker.internal:11434`
+
+7. **Restart services nếu cần**:
+
+   ```bash
+   docker compose restart backend
+   docker compose restart frontend
+   ```
+
+**Sau khi chạy init, đợi 10-30 giây rồi refresh trang game**.
+
+#### WorldStatus đã "running" nhưng Frontend vẫn lỗi
+
+**Nguyên nhân có thể**:
+1. Thiếu dữ liệu trong các bảng cần thiết
+2. Frontend không kết nối được với backend
+3. Lỗi JavaScript trong console
+4. Environment variables không đúng
+
+**Các bước kiểm tra và sửa**:
+
+1. **Kiểm tra Console trong trình duyệt** (QUAN TRỌNG):
+   - Mở Developer Tools (F12)
+   - Vào tab **Console**
+   - Xem có lỗi JavaScript nào không
+   - Các lỗi thường gặp:
+     - `Failed to fetch` → Frontend không kết nối được backend
+     - `Cannot read property 'world' of undefined` → Thiếu dữ liệu world
+     - `CORS error` → Vấn đề CORS
+
+2. **Kiểm tra Network requests**:
+   - Vào tab **Network** trong Developer Tools
+   - Refresh trang
+   - Kiểm tra các request đến backend:
+     - Request đến `http://10.0.12.81:3210` có thành công không?
+     - Có request nào bị fail (màu đỏ) không?
+   - Nếu có lỗi 404 hoặc 500, kiểm tra backend logs
+
+3. **Kiểm tra dữ liệu trong Database** (qua Dashboard):
+
+   **Bước 1**: Kiểm tra `worlds` table:
+   - Dashboard → Data → `worlds`
+   - Phải có ít nhất 1 document
+   - Mở document và kiểm tra:
+     - Có field `players` (có thể là array rỗng)
+     - Có field `agents` (có thể là array rỗng)
+     - Có field `conversations` (có thể là array rỗng)
+
+   **Bước 2**: Kiểm tra `maps` table:
+   - Dashboard → Data → `maps`
+   - Phải có ít nhất 1 document với `worldId` khớp với worldId trong `worldStatus`
+   - Mở document và kiểm tra có các fields:
+     - `width`, `height`
+     - `tileSetUrl`, `bgTiles`, `objectTiles`
+
+   **Bước 3**: Kiểm tra `worldStatus`:
+   - Dashboard → Data → `worldStatus`
+   - Đảm bảo:
+     - `status` = `"running"`
+     - `worldId` có giá trị hợp lệ
+     - `engineId` có giá trị hợp lệ
+     - `isDefault` = `true`
+
+   **Bước 4**: Kiểm tra `engines` table:
+   - Dashboard → Data → `engines`
+   - Phải có engine với ID khớp với `engineId` trong `worldStatus`
+
+4. **Kiểm tra VITE_CONVEX_URL trong frontend**:
+
+   ```bash
+   # Kiểm tra docker-compose.yml
+   cat docker-compose.yml | grep VITE_CONVEX_URL
+   ```
+
+   Phải là:
+   ```yaml
+   environment:
+     - VITE_CONVEX_URL=http://10.0.12.81:3210
+   ```
+
+   **⚠️ Lưu ý quan trọng**: URL phải có dấu `:` giữa IP và port:
+   - ✅ Đúng: `http://10.0.12.81:3210`
+   - ❌ Sai: `http://10.0.12.81.3210` (thiếu dấu `:`)
+
+   Nếu sai, sửa trong `docker-compose.yml`:
+   ```yaml
+   frontend:
+     environment:
+       - VITE_CONVEX_URL=http://10.0.12.81:3210
+   ```
+
+   Sau đó restart:
+   ```bash
+   docker compose restart frontend
+   # Hoặc rebuild nếu cần
+   docker compose up -d --build frontend
+   ```
+
+5. **Kiểm tra backend đang chạy**:
+
+   ```bash
+   # Kiểm tra backend container
+   docker compose ps backend
+   
+   # Kiểm tra logs backend
+   docker compose logs backend | tail -50
+   
+   # Test backend API
+   curl http://10.0.12.81:3210/version
+   ```
+
+6. **Kiểm tra frontend container**:
+
+   ```bash
+   # Kiểm tra frontend container
+   docker compose ps frontend
+   
+   # Kiểm tra logs frontend
+   docker compose logs frontend | tail -50
+   ```
+
+7. **Nếu thiếu dữ liệu, chạy init lại**:
+
+   - Dashboard → Functions → `init` → Run
+   - Hoặc reset hoàn toàn:
+     - Dashboard → Functions → `testing:wipeAllTables` → Run
+     - Sau đó Dashboard → Functions → `init` → Run
+
+8. **Kiểm tra CORS (nếu có lỗi CORS)**:
+
+   - Lỗi CORS thường xảy ra khi frontend và backend không cùng origin
+   - Đảm bảo `VITE_CONVEX_URL` trỏ đúng đến backend
+   - Kiểm tra backend có cho phép CORS từ frontend không
+
+9. **Restart tất cả services**:
+
+   ```bash
+   docker compose restart
+   ```
+
+   Sau đó đợi 10-30 giây và refresh trang.
+
+10. **Kiểm tra agents đã được tạo chưa**:
+
+    - Dashboard → Data → `worlds` → mở document → xem field `agents`
+    - Nếu `agents` là array rỗng `[]`, agents chưa được tạo
+    - Chạy init lại hoặc đợi vài phút để agents được tạo tự động
+
+**Lưu ý**: Sau mỗi bước, refresh trang game và kiểm tra lại.
+
+#### Không thấy agents (nhưng có map)
+
+- Đợi vài giây để simulation khởi động và agents được tạo
+- Refresh trang nếu cần
+- Kiểm tra trong Dashboard → `worlds` table → xem field `agents` có dữ liệu không
+- Kiểm tra logs backend: `docker compose logs backend | grep -i agent`
+- Nếu agents vẫn chưa có sau vài phút, chạy init lại
+
+#### Không thể di chuyển
+
 - Đảm bảo bạn đã click vào map, không phải vào agent
 - Thử zoom out để thấy map rõ hơn
+- Kiểm tra console trong Developer Tools có lỗi không
 
-**Không thể trò chuyện**:
+#### Không thể trò chuyện
+
 - Đảm bảo bạn đã đăng nhập và click "Interact"
 - Đảm bảo agent đã đến gần bạn (trong vòng tròn)
 - Kiểm tra xem có đủ 8 người chơi chưa
@@ -954,7 +1423,114 @@ npx convex env set OLLAMA_HOST http://10.0.12.81:11434
 
 **Lưu ý**: Với cách này, đảm bảo Ollama đang lắng nghe trên `0.0.0.0:11434` (tất cả interfaces), không chỉ `127.0.0.1:11434`.
 
-### 3. Lỗi "Unable to read your package.json" khi set environment variables
+### 3. Lỗi "ReferenceError: File is not defined" khi chạy npx convex
+
+**Lỗi**:
+```
+ReferenceError: File is not defined
+    at ../common/temp/node_modules/.pnpm/undici@7.16.0/node_modules/undici/lib/web/webidl/index.js
+```
+
+**Nguyên nhân**: Convex CLI gặp vấn đề tương thích với Node.js v18.19.1 hoặc một số version cũ.
+
+**Giải pháp**:
+
+#### Giải pháp 1: Sử dụng Dashboard (Khuyến nghị - Dễ nhất)
+
+Không cần CLI, chỉ cần dùng Dashboard:
+
+1. Truy cập `http://10.0.12.81:6791`
+2. Đăng nhập với admin key
+3. Vào **Settings** → **Environment Variables**
+4. Thêm biến:
+   - Key: `OLLAMA_HOST`
+   - Value: `http://10.0.12.81:11434` hoặc `http://host.docker.internal:11434`
+5. Click **Save**
+
+#### Giải pháp 2: Cài đặt Convex CLI globally
+
+```bash
+# Cài đặt globally
+npm install -g convex
+
+# Sau đó sử dụng lệnh convex thay vì npx convex
+cd ~/ai-town
+convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+#### Giải pháp 3: Cập nhật Node.js lên version 20+
+
+Nếu chưa có nvm, cài đặt nvm trước:
+
+```bash
+# Cài đặt nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+
+# Tải lại shell
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$HOME/.bashrc" ] && \. "$HOME/.bashrc"
+
+# Hoặc logout và login lại
+```
+
+Sau đó cài Node.js 20:
+
+```bash
+# Cài đặt Node.js 20
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+# Kiểm tra version
+node --version  # Nên là v20.x.x
+
+# Cài lại Convex CLI với Node.js 20
+npm install -g convex
+
+# Sau đó thử lại
+cd ~/ai-town
+convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+**Hoặc cài Node.js 20 trực tiếp không dùng nvm**:
+
+```bash
+# Tải và cài Node.js 20 từ NodeSource
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Kiểm tra version
+node --version  # Nên là v20.x.x
+
+# Cài lại Convex CLI
+npm install -g convex
+
+# Thử lại
+cd ~/ai-town
+convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+#### Giải pháp 4: Sử dụng API trực tiếp
+
+Nếu tất cả các cách trên không hoạt động, có thể set qua API:
+
+```bash
+# Lấy admin key từ .env.local
+ADMIN_KEY="<admin-key-của-bạn>"
+
+# Set OLLAMA_HOST qua API
+curl -X POST "http://10.0.12.81:3210/api/setEnvironmentVariable" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "OLLAMA_HOST", "value": "http://10.0.12.81:11434"}'
+```
+
+**Lưu ý**: 
+- ⭐ **Cách tốt nhất và đơn giản nhất là sử dụng Dashboard** (Giải pháp 1) - Không cần CLI, không cần cập nhật Node.js
+- Nếu muốn dùng CLI, bạn **PHẢI** cập nhật Node.js lên v20+ vì Convex CLI không tương thích với Node.js v18
+
+### 4. Lỗi "Unable to read your package.json" khi set environment variables
 
 **Lỗi**:
 ```
@@ -965,7 +1541,7 @@ npx convex env set OLLAMA_HOST http://10.0.12.81:11434
 
 **Giải pháp**:
 
-1. **Chạy từ host** (khuyến nghị):
+1. **Chạy từ host** (đảm bảo đã cài Convex CLI):
 
 ```bash
 cd ~/ai-town
@@ -974,17 +1550,240 @@ cd ~/ai-town
 # CONVEX_SELF_HOSTED_URL=http://10.0.12.81:3210
 # CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key>"
 
-# Sau đó chạy lệnh
-npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+# Sử dụng convex (đã cài globally) thay vì npx convex
+convex env set OLLAMA_HOST http://10.0.12.81:11434
 ```
 
-2. **Hoặc set qua Dashboard**:
+2. **Hoặc set qua Dashboard** (Khuyến nghị):
    - Truy cập `http://10.0.12.81:6791`
    - Đăng nhập với admin key
    - Vào Settings → Environment Variables
    - Thêm biến môi trường
 
-### 4. Ollama không kết nối được từ Docker
+### 4. Lỗi "Could not resolve 'convex/server'" khi chạy Convex CLI
+
+**Lỗi**:
+```
+✘ [ERROR] Could not resolve "convex/server"
+    convex-virtual-config:./convex/convex.config.js:1:26:
+      1 │ import { defineApp } from "convex/server";
+```
+
+**Nguyên nhân**: 
+- Chưa cài dependencies (`npm install`)
+- Hoặc đang dùng Node.js v18 (Convex CLI cần Node.js v20+)
+
+**Giải pháp**:
+
+#### Giải pháp 1: Cài dependencies (Nếu chưa cài)
+
+```bash
+cd ~/ai-town
+npm install
+```
+
+Sau đó thử lại. **Nhưng lưu ý**: Bạn vẫn cần Node.js v20+ để dùng Convex CLI.
+
+#### Giải pháp 2: Sử dụng Dashboard (Khuyến nghị - Không cần CLI)
+
+Thay vì dùng CLI, sử dụng Dashboard:
+- Truy cập `http://10.0.12.81:6791`
+- Đăng nhập với admin key
+- Vào **Functions** → chạy functions
+- Vào **Settings** → set environment variables
+
+#### Giải pháp 3: Cài Node.js 20+ (Nếu muốn dùng CLI)
+
+Xem hướng dẫn ở phần [Lỗi "ReferenceError: File is not defined"](#4-lỗi-referenceerror-file-is-not-defined-khi-chạy-init-hoặc-các-lệnh-convex-cli) bên dưới.
+
+### 5. Cảnh báo "Engine is not active!" khi chạy init
+
+**Cảnh báo**:
+```
+warn: 'Engine ... is not active! Run "npx convex run testing:resume" to restart it.'
+```
+
+**Nguyên nhân**: 
+- WorldStatus không phải `"running"` (có thể là `"inactive"` hoặc `"stoppedByDeveloper"`)
+- Init function chỉ chạy khi worldStatus là `"running"`
+
+**Giải pháp**:
+
+#### Bước 1: Resume Engine trước
+
+**Qua Dashboard**:
+1. Truy cập: `http://10.0.12.81:6791`
+2. Vào **Functions** → `testing:resume` → **Run**
+3. Bạn sẽ thấy log: `'Resuming engine ... for world ... (state: inactive)...'`
+4. Đợi vài giây (5-10 giây) để engine start hoàn toàn
+
+**Lưu ý**: Log "Resuming engine ... (state: inactive)..." là **bình thường** - có nghĩa là engine đang được khởi động lại từ trạng thái inactive.
+
+**Hoặc qua API**:
+```bash
+ADMIN_KEY="<admin-key>"
+curl -X POST "http://10.0.12.81:3210/api/mutation/testing:resume" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Bước 2: Kiểm tra WorldStatus
+
+Trong Dashboard → Data → `worldStatus`:
+- Phải có `status` = `"running"`
+- Nếu vẫn không phải "running", thử kick engine (xem bước 3)
+
+#### Bước 3: Kick Engine (Nếu resume không hoạt động)
+
+**Qua Dashboard**:
+- Functions → `testing:kick` → **Run**
+
+**Hoặc qua API**:
+```bash
+curl -X POST "http://10.0.12.81:3210/api/mutation/testing:kick" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Bước 4: Chạy Init lại
+
+Sau khi worldStatus đã là "running":
+- Functions → `init` → **Run**
+
+**Thứ tự đúng**:
+1. ✅ `testing:resume` (hoặc `testing:kick`) → để start engine
+2. ✅ Kiểm tra worldStatus = "running"
+3. ✅ `init` → để tạo agents
+
+**Lưu ý**: 
+- Init function sẽ không tạo agents nếu worldStatus không phải "running"
+- Phải chạy resume/kick trước, sau đó mới chạy init
+
+### 6. WorldStatus hiển thị "invalid" hoặc có lỗi
+
+**Lỗi**: 
+- WorldStatus hiển thị "invalid" trong Dashboard
+- Hoặc có lỗi khi chạy `testing:resume`
+
+**Nguyên nhân**: 
+- Database chưa được khởi tạo đúng cách
+- Hoặc dữ liệu bị corrupt/invalid
+- Hoặc thiếu dữ liệu cần thiết (worlds, maps, engines)
+
+**Giải pháp**:
+
+#### Giải pháp 1: Reset và khởi tạo lại database (Khuyến nghị)
+
+1. **Xóa toàn bộ dữ liệu cũ** (qua Dashboard):
+   - Truy cập Dashboard: `http://10.0.12.81:6791`
+   - Vào **Functions** → tìm function `testing:wipeAllTables`
+   - Click **Run** để xóa tất cả dữ liệu
+
+2. **Hoặc xóa qua API**:
+   ```bash
+   ADMIN_KEY="<admin-key>"
+   curl -X POST "http://10.0.12.81:3210/api/mutation/testing:wipeAllTables" \
+     -H "Authorization: Bearer $ADMIN_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+   ```
+
+3. **Chạy init lại**:
+   - Trong Dashboard → **Functions** → `init` → **Run**
+   - Hoặc qua API:
+     ```bash
+     curl -X POST "http://10.0.12.81:3210/api/mutation/init" \
+       -H "Authorization: Bearer $ADMIN_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{}'
+     ```
+
+4. **Kiểm tra kết quả**:
+   - Dashboard → **Data** → `worldStatus` → phải có status là `"running"`
+   - Dashboard → **Data** → `worlds` → phải có ít nhất 1 document
+   - Dashboard → **Data** → `maps` → phải có map data
+
+#### Giải pháp 2: Resume world nếu đang inactive
+
+Nếu worldStatus là `"inactive"` hoặc `"stoppedByDeveloper"`:
+
+1. **Qua Dashboard**:
+   - Vào **Functions** → `testing:resume` → **Run**
+
+2. **Qua API**:
+   ```bash
+   curl -X POST "http://10.0.12.81:3210/api/mutation/testing:resume" \
+     -H "Authorization: Bearer $ADMIN_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{}'
+   ```
+
+#### Giải pháp 3: Kiểm tra và sửa dữ liệu thủ công
+
+1. **Kiểm tra trong Dashboard**:
+   - `worldStatus` → đảm bảo có `worldId`, `engineId`, `status`
+   - `worlds` → đảm bảo có document với ID khớp với `worldId` trong `worldStatus`
+   - `engines` → đảm bảo có engine với ID khớp với `engineId` trong `worldStatus`
+
+2. **Nếu thiếu dữ liệu**, chạy init lại (xem Giải pháp 1)
+
+**Lưu ý**: Sau khi reset và chạy init lại, đợi 10-30 giây rồi refresh trang game.
+
+### 6. Lỗi "ReferenceError: File is not defined" khi chạy init hoặc các lệnh Convex CLI
+
+**Lỗi**:
+```
+ReferenceError: File is not defined
+    at ../common/temp/node_modules/.pnpm/undici@7.16.0/node_modules/undici/lib/web/webidl/index.js
+```
+
+**Nguyên nhân**: Convex CLI **KHÔNG tương thích** với Node.js v18. Bạn **PHẢI** cài Node.js v20+ để sử dụng Convex CLI.
+
+**Giải pháp**:
+
+#### Giải pháp 1: Sử dụng Dashboard (Khuyến nghị - Không cần CLI)
+
+Thay vì dùng CLI, sử dụng Dashboard:
+
+1. **Chạy init function qua Dashboard**:
+   - Truy cập `http://10.0.12.81:6791`
+   - Đăng nhập với admin key
+   - Vào **Functions** → tìm function `init` → Click **Run** hoặc **Execute**
+
+2. **Set environment variables qua Dashboard**:
+   - Vào **Settings** → **Environment Variables**
+   - Thêm biến môi trường
+
+#### Giải pháp 2: Cài Node.js 20+ (Bắt buộc nếu muốn dùng CLI)
+
+```bash
+# Cài nvm (nếu chưa có)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+source ~/.bashrc
+
+# Cài Node.js 20
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+# Kiểm tra
+node --version  # Phải là v20.x.x
+
+# Cài lại Convex CLI
+npm install -g convex
+
+# Sau đó mới có thể dùng các lệnh
+cd ~/ai-town
+convex dev --run init --until-success
+```
+
+**Lưu ý**: ⭐ **Cách tốt nhất là dùng Dashboard** - không cần cài Node.js 20, không gặp lỗi, dễ sử dụng hơn.
+
+### 5. Ollama không kết nối được từ Docker
 
 Nếu backend trong Docker không kết nối được với Ollama trên host:
 
@@ -1025,7 +1824,249 @@ sudo lsof -i :3210
 sudo kill -9 <PID>
 ```
 
-### 3. Frontend không kết nối được backend
+### 3. Lỗi "Invalid deployment address" - URL sai format
+
+**Lỗi**:
+```
+Uncaught Error: Invalid deployment address: "http://10.0.12.81.3210" is not a valid URL.
+```
+
+**Nguyên nhân**: URL bị sai format - thiếu dấu `:` giữa IP và port (đang là `.` thay vì `:`).
+
+**Giải pháp**:
+
+1. **Kiểm tra và sửa docker-compose.yml**:
+
+   ```bash
+   # Kiểm tra
+   cat docker-compose.yml | grep VITE_CONVEX_URL
+   ```
+
+   Phải là:
+   ```yaml
+   frontend:
+     environment:
+       # ✅ ĐÚNG: Có dấu : giữa IP và port
+       - VITE_CONVEX_URL=http://10.0.12.81:3210
+   ```
+
+   Nếu sai (thiếu dấu `:`), sửa trong `docker-compose.yml`:
+   ```yaml
+   frontend:
+     environment:
+       - VITE_CONVEX_URL=http://10.0.12.81:3210  # Đảm bảo có dấu :
+   ```
+
+2. **Kiểm tra file .env hoặc .env.local** (nếu có):
+
+   ```bash
+   # Kiểm tra
+   cat .env 2>/dev/null | grep VITE_CONVEX_URL || echo "No .env file"
+   cat .env.local 2>/dev/null | grep VITE_CONVEX_URL || echo "No .env.local file"
+   ```
+
+   Nếu có và sai, sửa:
+   ```env
+   VITE_CONVEX_URL=http://10.0.12.81:3210
+   ```
+
+3. **Restart frontend**:
+
+   ```bash
+   docker compose restart frontend
+   ```
+
+   Hoặc rebuild nếu cần:
+   ```bash
+   docker compose up -d --build frontend
+   ```
+
+4. **Clear browser cache và refresh**:
+   - Mở Developer Tools (F12)
+   - Click chuột phải vào nút Refresh
+   - Chọn "Empty Cache and Hard Reload"
+
+**Lưu ý**: 
+- ✅ URL đúng: `http://10.0.12.81:3210` (có dấu `:`)
+- ❌ URL sai: `http://10.0.12.81.3210` (thiếu dấu `:`, có dấu `.`)
+
+### 4. Lỗi "Unexpected non-whitespace character after JSON" khi interactive với agent
+
+**Lỗi**:
+```
+Uncaught SyntaxError: Unexpected non-whitespace character after JSON at position 4
+    at ollamaFetchEmbedding (../../convex/util/llm.ts:703:3)
+```
+
+**Nguyên nhân**: 
+- Ollama embedding model chưa được tải
+- Hoặc Ollama API trả về response không phải JSON hợp lệ
+- Hoặc model embedding không tương thích
+
+**Giải pháp**:
+
+#### Bước 1: Kiểm tra model embedding đã được tải chưa
+
+```bash
+# Kiểm tra các model đã tải
+ollama list
+
+# Phải thấy model: mxbai-embed-large
+# Nếu không có, tải model:
+ollama pull mxbai-embed-large
+```
+
+#### Bước 2: Test Ollama Embedding API
+
+```bash
+# Test embedding API
+curl http://localhost:11434/api/embeddings \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mxbai-embed-large", "prompt": "test"}'
+```
+
+Response phải là JSON hợp lệ:
+```json
+{
+  "embedding": [0.123, 0.456, ...]
+}
+```
+
+Nếu không phải JSON hoặc có lỗi, xem bước 3.
+
+#### Bước 3: Kiểm tra OLLAMA_HOST đã được set đúng chưa
+
+Trong Dashboard → Settings → Environment Variables:
+- Key: `OLLAMA_HOST`
+- Value: `http://10.0.12.81:11434` hoặc `http://host.docker.internal:11434`
+
+#### Bước 4: Kiểm tra Ollama đang chạy và accessible
+
+```bash
+# Test từ host
+curl http://localhost:11434
+
+# Test từ container
+docker compose exec backend curl http://host.docker.internal:11434
+# Hoặc
+docker compose exec backend curl http://10.0.12.81:11434
+```
+
+#### Bước 5: Kiểm tra model embedding dimension
+
+Model `mxbai-embed-large` phải có dimension 1024. Kiểm tra trong code:
+
+```bash
+# Kiểm tra trong convex/util/llm.ts
+grep OLLAMA_EMBEDDING_DIMENSION convex/util/llm.ts
+```
+
+Phải là:
+```typescript
+const OLLAMA_EMBEDDING_DIMENSION = 1024;
+```
+
+#### Bước 6: Restart backend sau khi tải model
+
+Sau khi tải model embedding:
+
+```bash
+docker compose restart backend
+```
+
+#### Bước 7: Kiểm tra logs backend
+
+```bash
+docker compose logs backend | grep -i embedding
+docker compose logs backend | grep -i ollama
+```
+
+Tìm lỗi liên quan đến embedding hoặc Ollama.
+
+**Lưu ý**: 
+- Model `mxbai-embed-large` cần khoảng 1.3GB dung lượng
+- Đảm bảo có đủ RAM và dung lượng ổ cứng
+- Nếu model chưa được tải, Ollama sẽ tự động tải khi được gọi, nhưng có thể mất thời gian
+
+### 5. Lỗi "Documents changed while mutation was being run" - Transaction Conflict
+
+**Lỗi**:
+```
+ERROR: Documents read from or written to the "engines" table changed while this mutation was being run
+A call to "cron_commit_mutation" changed the document with ID "..."
+```
+
+**Nguyên nhân**: 
+- Transaction conflict trong Convex khi có nhiều mutations cố gắng update cùng một document trong bảng "engines" cùng lúc
+- Đây là cơ chế bảo vệ của Convex để đảm bảo tính nhất quán dữ liệu
+- Thường xảy ra khi:
+  - Game engine đang chạy và update engine state
+  - Có cron job hoặc mutation khác cũng đang cố update cùng engine
+  - Có nhiều runStep actions chạy đồng thời
+
+**Giải pháp**:
+
+#### Giải pháp 1: Đây thường là lỗi transient (tạm thời)
+
+Lỗi này thường **tự giải quyết** sau vài giây vì Convex sẽ retry mutations. Bạn có thể:
+- Đợi vài giây và thử lại
+- Refresh trang frontend
+- Game sẽ tiếp tục hoạt động bình thường
+
+#### Giải pháp 2: Kick Engine để reset
+
+Nếu lỗi tiếp tục xảy ra:
+
+**Qua Dashboard**:
+- Functions → `testing:kick` → **Run**
+
+**Hoặc qua API**:
+```bash
+curl -X POST "http://10.0.12.81:3210/api/mutation/testing:kick" \
+  -H "Authorization: Bearer $ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+#### Giải pháp 3: Kiểm tra Cron Jobs
+
+Cron jobs có thể gây conflict nếu chạy quá thường xuyên:
+
+```bash
+# Kiểm tra logs để xem cron jobs
+docker compose logs backend | grep -i cron
+```
+
+Nếu có quá nhiều cron jobs chạy, có thể cần điều chỉnh tần suất trong `convex/crons.ts`.
+
+#### Giải pháp 4: Restart Backend (Nếu lỗi nghiêm trọng)
+
+Nếu lỗi tiếp tục và không tự giải quyết:
+
+```bash
+docker compose restart backend
+```
+
+#### Giải pháp 5: Kiểm tra chỉ có 1 instance engine đang chạy
+
+Trong Dashboard → Data → `engines`:
+- Đảm bảo chỉ có 1 engine document với `running: true`
+- Nếu có nhiều engines đang chạy, có thể gây conflict
+
+**Lưu ý**: 
+- ⚠️ Đây là lỗi **bình thường** trong hệ thống concurrent như Convex
+- ✅ Thường **tự giải quyết** sau vài giây
+- ✅ Không ảnh hưởng đến dữ liệu, chỉ là warning về transaction conflict
+- ✅ Game sẽ tiếp tục hoạt động sau khi conflict được giải quyết
+
+**Khi nào cần lo lắng**:
+- Nếu lỗi xuất hiện **liên tục** (nhiều lần mỗi giây)
+- Nếu game **hoàn toàn không hoạt động** sau vài phút
+- Nếu có nhiều engines đang chạy cùng lúc
+
+Trong các trường hợp đó, kick engine hoặc restart backend.
+
+### 6. Frontend không kết nối được backend
 
 Kiểm tra biến môi trường `VITE_CONVEX_URL` trong `docker-compose.yml`:
 

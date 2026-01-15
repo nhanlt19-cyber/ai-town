@@ -9,7 +9,8 @@ services:
       - .:/usr/src/app
       - /usr/src/app/node_modules
     environment:
-      - VITE_CONVEX_URL=http://127.0.0.1:${PORT:-3210}
+      # Sử dụng IP cụ thể để truy cập từ laptop
+      - VITE_CONVEX_URL=http://10.0.12.81:3210
     networks:
       - ai-town-network
   backend:

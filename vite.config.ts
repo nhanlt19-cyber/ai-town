@@ -6,6 +6,8 @@ export default defineConfig({
   base: '/ai-town',
   plugins: [react()],
   server: {
-    allowedHosts: ['ai-town-your-app-name.fly.dev', 'localhost', '127.0.0.1'],
+    // Cho phép tất cả các host (không chặn theo hostname)
+    // CẢNH BÁO: Chỉ nên dùng trong môi trường dev / demo.
+    allowedHosts: [/^.*$/],
   },
 });
