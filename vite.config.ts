@@ -6,8 +6,11 @@ export default defineConfig({
   base: '/ai-town',
   plugins: [react()],
   server: {
-    // Cho phép tất cả các host (không chặn theo hostname)
-    // CẢNH BÁO: Chỉ nên dùng trong môi trường dev / demo.
-    allowedHosts: [/^.*$/],
+    // Cho phép dev server lắng nghe trên tất cả địa chỉ và chấp nhận mọi host
+    // CẢNH BÁO: Chỉ dùng cho môi trường dev / demo
+    host: true,
+    port: 5173,
+    strictPort: true,
+    allowedHosts: true,
   },
 });
