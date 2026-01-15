@@ -388,22 +388,84 @@ CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key-vừa-tạo>"
 
 ### 5. Cấu hình Convex environment variables
 
-```bash
-# Set OLLAMA_HOST
-docker compose exec backend npx convex env set OLLAMA_HOST http://host.docker.internal:11434
+**Lưu ý**: Lệnh `npx convex env set` cần chạy từ thư mục có `package.json`, không thể chạy từ trong container backend.
 
-# Hoặc nếu Ollama chạy trên host với IP cụ thể
-docker compose exec backend npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+#### Cách 1: Set từ host (Khuyến nghị)
+
+1. **Cấu hình Convex CLI để kết nối với self-hosted backend**:
+
+```bash
+cd ~/ai-town
+
+# Tạo file .env.local nếu chưa có
+nano .env.local
 ```
+
+Thêm vào file `.env.local`:
+
+```env
+CONVEX_SELF_HOSTED_URL=http://10.0.12.81:3210
+CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key-đã-tạo-ở-bước-4>"
+```
+
+2. **Set OLLAMA_HOST từ host**:
+
+```bash
+cd ~/ai-town
+
+# Set OLLAMA_HOST (sử dụng host.docker.internal nếu đã cấu hình extra_hosts)
+npx convex env set OLLAMA_HOST http://host.docker.internal:11434
+
+# HOẶC sử dụng IP trực tiếp (nếu host.docker.internal không hoạt động)
+npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+#### Cách 2: Set qua Convex Dashboard
+
+1. Truy cập dashboard: `http://10.0.12.81:6791`
+2. Đăng nhập với admin key
+3. Vào phần **"Environment Variables"** hoặc **"Settings"**
+4. Thêm biến môi trường:
+   - Key: `OLLAMA_HOST`
+   - Value: `http://host.docker.internal:11434` hoặc `http://10.0.12.81:11434`
+
+#### Kiểm tra kết nối đến Ollama
+
+Sau khi cấu hình, kiểm tra kết nối:
+
+```bash
+# 1. Test từ host (đảm bảo Ollama đang chạy)
+curl http://localhost:11434
+# Nên trả về: "Ollama is running"
+
+# 2. Restart containers để áp dụng extra_hosts
+docker compose down
+docker compose up -d
+
+# 3. Test từ container (sau khi đã thêm extra_hosts)
+docker compose exec backend curl http://host.docker.internal:11434
+# Nên trả về: "Ollama is running"
+
+# 4. Nếu host.docker.internal vẫn không hoạt động, lấy IP gateway
+GATEWAY_IP=$(docker network inspect ai-town_ai-town-network | grep -oP '"Gateway": "\K[^"]+')
+echo "Gateway IP: $GATEWAY_IP"
+
+# 5. Test với IP gateway
+docker compose exec backend curl http://$GATEWAY_IP:11434
+
+# 6. Hoặc test với IP host trực tiếp
+docker compose exec backend curl http://10.0.12.81:11434
+```
+
+**Lưu ý**: Nếu Ollama chỉ lắng nghe trên `127.0.0.1:11434`, bạn cần cấu hình để lắng nghe trên tất cả interfaces (`0.0.0.0:11434`). Xem phần [Cài Đặt và Cấu Hình Ollama](#cài-đặt-và-cấu-hình-ollama).
 
 ### 6. Khởi tạo database
 
 ```bash
-# Chạy lệnh init để khởi tạo database
-docker compose exec backend npx convex dev --run init --until-success
-
-# Hoặc từ máy host (nếu đã cấu hình Convex CLI)
 cd ~/ai-town
+
+# Đảm bảo đã có .env.local với CONVEX_SELF_HOSTED_URL và CONVEX_SELF_HOSTED_ADMIN_KEY
+# Chạy lệnh init để khởi tạo database
 npx convex dev --run init --until-success
 ```
 
@@ -780,7 +842,149 @@ docker compose restart backend
 
 ## 🐛 Khắc Phục Sự Cố
 
-### 1. Ollama không kết nối được từ Docker
+### 1. Lỗi "address already in use" cho port 11434
+
+**Lỗi**: 
+```
+ERROR: failed to bind host port for 0.0.0.0:11434: address already in use
+```
+
+**Nguyên nhân**: Port 11434 đã được sử dụng bởi Ollama đang chạy trên host.
+
+**Giải pháp**:
+
+#### Cách 1: Xóa port mapping Ollama trong docker-compose.yml (Khuyến nghị)
+
+File `docker-compose.yml` đã được cập nhật để không map port 11434 từ container. Ollama nên chạy trên host, không phải trong container.
+
+Nếu bạn vẫn gặp lỗi, kiểm tra file `docker-compose.yml` và đảm bảo không có dòng:
+```yaml
+- '${OLLAMA_PORT:-11434}:11434'
+```
+
+#### Cách 2: Dừng Ollama trên host (nếu không cần)
+
+Nếu bạn muốn chạy Ollama trong container (không khuyến nghị), dừng Ollama trên host:
+
+```bash
+# Kiểm tra process đang dùng port 11434
+sudo lsof -i :11434
+# Hoặc
+sudo netstat -tlnp | grep 11434
+
+# Dừng Ollama service
+sudo systemctl stop ollama
+
+# Hoặc kill process
+sudo kill -9 <PID>
+```
+
+#### Cách 3: Thay đổi port Ollama
+
+Nếu bạn muốn chạy Ollama trên port khác:
+
+1. Cấu hình Ollama chạy trên port khác (ví dụ 11435):
+```bash
+export OLLAMA_HOST=0.0.0.0:11435
+ollama serve
+```
+
+2. Cập nhật docker-compose.yml:
+```yaml
+ports:
+  - '11435:11434'  # Map port 11435 host -> 11434 container
+```
+
+3. Cập nhật OLLAMA_HOST trong Convex:
+```bash
+docker compose exec backend npx convex env set OLLAMA_HOST http://host.docker.internal:11435
+```
+
+**Lưu ý**: Cách tốt nhất là để Ollama chạy trên host và backend container kết nối qua `host.docker.internal:11434`.
+
+### 2. Lỗi "Could not resolve host: host.docker.internal"
+
+**Lỗi**:
+```
+curl: (6) Could not resolve host: host.docker.internal
+```
+
+**Nguyên nhân**: Trên Linux, `host.docker.internal` không được hỗ trợ mặc định (chỉ có trên Mac/Windows).
+
+**Giải pháp**:
+
+#### Cách 1: Thêm extra_hosts vào docker-compose.yml (Đã cập nhật)
+
+File `docker-compose.yml` đã được cập nhật với `extra_hosts` để hỗ trợ `host.docker.internal` trên Linux:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+Sau khi thêm, restart containers:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+#### Cách 2: Sử dụng IP gateway của Docker network
+
+1. **Lấy IP gateway**:
+```bash
+docker network inspect ai-town_ai-town-network | grep Gateway
+# Hoặc
+ip addr show docker0 | grep inet
+```
+
+2. **Sử dụng IP gateway thay vì host.docker.internal**:
+```bash
+cd ~/ai-town
+npx convex env set OLLAMA_HOST http://172.18.0.1:11434
+# (Thay 172.18.0.1 bằng IP gateway thực tế của bạn)
+```
+
+#### Cách 3: Sử dụng IP của host trực tiếp
+
+```bash
+cd ~/ai-town
+npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+**Lưu ý**: Với cách này, đảm bảo Ollama đang lắng nghe trên `0.0.0.0:11434` (tất cả interfaces), không chỉ `127.0.0.1:11434`.
+
+### 3. Lỗi "Unable to read your package.json" khi set environment variables
+
+**Lỗi**:
+```
+✖ Unable to read your package.json: Error: ENOENT: no such file or directory
+```
+
+**Nguyên nhân**: Lệnh `npx convex env set` cần chạy từ thư mục có `package.json`, không thể chạy từ trong container backend.
+
+**Giải pháp**:
+
+1. **Chạy từ host** (khuyến nghị):
+
+```bash
+cd ~/ai-town
+
+# Đảm bảo đã có .env.local với:
+# CONVEX_SELF_HOSTED_URL=http://10.0.12.81:3210
+# CONVEX_SELF_HOSTED_ADMIN_KEY="<admin-key>"
+
+# Sau đó chạy lệnh
+npx convex env set OLLAMA_HOST http://10.0.12.81:11434
+```
+
+2. **Hoặc set qua Dashboard**:
+   - Truy cập `http://10.0.12.81:6791`
+   - Đăng nhập với admin key
+   - Vào Settings → Environment Variables
+   - Thêm biến môi trường
+
+### 4. Ollama không kết nối được từ Docker
 
 Nếu backend trong Docker không kết nối được với Ollama trên host:
 
@@ -788,10 +992,15 @@ Nếu backend trong Docker không kết nối được với Ollama trên host:
 # Kiểm tra Ollama có chạy không
 curl http://localhost:11434
 
-# Test từ trong container
+# Test từ trong container (sau khi đã thêm extra_hosts)
 docker compose exec backend curl http://host.docker.internal:11434
 
-# Nếu không được, thử dùng IP trực tiếp
+# Nếu không được, thử dùng IP gateway
+docker network inspect ai-town_ai-town-network | grep Gateway
+# Sau đó test với IP gateway
+docker compose exec backend curl http://<gateway-ip>:11434
+
+# Hoặc dùng IP host trực tiếp
 docker compose exec backend curl http://10.0.12.81:11434
 ```
 
