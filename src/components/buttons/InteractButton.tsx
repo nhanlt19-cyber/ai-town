@@ -6,18 +6,21 @@ import { api } from '../../../convex/_generated/api';
 // import { SignInButton } from '@clerk/clerk-react';
 import { ConvexError } from 'convex/values';
 import { Id } from '../../../convex/_generated/dataModel';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { waitForInput } from '../../hooks/sendInput';
 import { useServerGame } from '../../hooks/serverGame';
 
 export default function InteractButton() {
   // const { isAuthenticated } = useConvexAuth();
+  const [isJoining, setIsJoining] = useState(false);
   const worldStatus = useQuery(api.world.defaultWorldStatus);
   const worldId = worldStatus?.worldId;
   const game = useServerGame(worldId);
   const humanTokenIdentifier = useQuery(api.world.userStatus, worldId ? { worldId } : 'skip');
   const userPlayerId =
-    game && [...game.world.players.values()].find((p) => p.human === humanTokenIdentifier)?.id;
+    game && humanTokenIdentifier
+      ? [...game.world.players.values()].find((p) => p.human === humanTokenIdentifier)?.id
+      : undefined;
   const join = useMutation(api.world.joinWorld);
   const leave = useMutation(api.world.leaveWorld);
   const isPlaying = !!userPlayerId;
@@ -25,41 +28,82 @@ export default function InteractButton() {
   const convex = useConvex();
   const joinInput = useCallback(
     async (worldId: Id<'worlds'>) => {
+      setIsJoining(true);
       let inputId;
       try {
+        console.log(`Calling joinWorld mutation for world ${worldId}`);
         inputId = await join({ worldId });
+        console.log(`Join mutation returned inputId: ${inputId}`);
       } catch (e: any) {
+        setIsJoining(false);
         if (e instanceof ConvexError) {
+          console.error('Join error:', e.data);
           toast.error(e.data);
           return;
         }
-        throw e;
+        console.error('Unexpected join error:', e);
+        toast.error(`Failed to join: ${e.message || 'Unknown error'}`);
+        return;
       }
       try {
+        console.log(`Waiting for input ${inputId} to complete...`);
         await waitForInput(convex, inputId);
+        console.log(`Input ${inputId} completed successfully`);
+        // Give the game state a moment to update
+        setTimeout(() => {
+          setIsJoining(false);
+        }, 500);
       } catch (e: any) {
-        toast.error(e.message);
+        setIsJoining(false);
+        console.error('WaitForInput error:', e);
+        toast.error(e.message || 'Failed to complete join');
       }
     },
-    [convex],
+    [convex, join],
   );
 
   const joinOrLeaveGame = () => {
-    if (
-      !worldId ||
-      // || !isAuthenticated
-      game === undefined
-    ) {
+    console.log('joinOrLeaveGame called', {
+      worldId,
+      game: game !== undefined,
+      isPlaying,
+      isJoining,
+      humanTokenIdentifier,
+      userPlayerId,
+    });
+
+    if (!worldId) {
+      console.warn('No worldId available');
+      toast.error('World not available. Please wait...');
       return;
     }
+
+    if (game === undefined) {
+      console.warn('Game is still loading');
+      toast.error('Game is still loading. Please wait...');
+      return;
+    }
+
+    if (isJoining) {
+      console.log('Already joining, ignoring click');
+      return;
+    }
+
     if (isPlaying) {
       console.log(`Leaving game for player ${userPlayerId}`);
-      void leave({ worldId });
+      void leave({ worldId }).catch((e: any) => {
+        console.error('Leave error:', e);
+        toast.error(`Failed to leave: ${e.message || 'Unknown error'}`);
+      });
     } else {
       console.log(`Joining game`);
       void joinInput(worldId);
     }
   };
+
+  const isDisabled = !worldId || game === undefined || isJoining;
+  const buttonText = isJoining ? 'Joining...' : isPlaying ? 'Leave' : 'Interact';
+
   // if (!isAuthenticated || game === undefined) {
   //   return (
   //     <SignInButton>
@@ -68,8 +112,12 @@ export default function InteractButton() {
   //   );
   // }
   return (
-    <Button imgUrl={interactImg} onClick={joinOrLeaveGame}>
-      {isPlaying ? 'Leave' : 'Interact'}
+    <Button
+      imgUrl={interactImg}
+      onClick={joinOrLeaveGame}
+      title={isDisabled ? 'Please wait for the game to load...' : undefined}
+    >
+      {buttonText}
     </Button>
   );
 }
