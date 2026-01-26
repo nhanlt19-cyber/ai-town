@@ -46,18 +46,21 @@ export default function InteractButton() {
         return;
       }
       try {
-        console.log(`Waiting for input ${inputId} to complete... (timeout: 10s)`);
-        // Use shorter timeout for join - 10 seconds
-        // If engine is overloaded, we'll fail fast instead of waiting forever
+        console.log(`Waiting for input ${inputId} to complete... (timeout: 30s)`);
+        // Use 30 second timeout for join - gives engine more time if overloaded
         // But we'll still check if player was created even if input times out
         try {
-          await waitForInput(convex, inputId, 10000);
+          await waitForInput(convex, inputId, 30000);
           console.log(`Input ${inputId} completed successfully`);
+          toast.success('Successfully joined the game!');
         } catch (timeoutError: any) {
-          console.warn('Input timeout, but checking if player was created anyway:', timeoutError.message);
-          // Even if input times out, check if player was actually created
-          // This can happen if engine is slow but still processes the input
-          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2s for state to update
+          console.warn('Input timeout, but player might still be created:', timeoutError.message);
+          // Even if input times out, wait a bit more for state to update
+          // Engine might be slow but still processing
+          await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3s for state to update
+          toast.warning(
+            'Join may still be processing. Please wait a moment and refresh the page to check if you joined successfully.'
+          );
         }
         // Give the game state a moment to update
         setTimeout(() => {
