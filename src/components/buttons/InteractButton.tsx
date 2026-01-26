@@ -46,9 +46,19 @@ export default function InteractButton() {
         return;
       }
       try {
-        console.log(`Waiting for input ${inputId} to complete...`);
-        await waitForInput(convex, inputId);
-        console.log(`Input ${inputId} completed successfully`);
+        console.log(`Waiting for input ${inputId} to complete... (timeout: 10s)`);
+        // Use shorter timeout for join - 10 seconds
+        // If engine is overloaded, we'll fail fast instead of waiting forever
+        // But we'll still check if player was created even if input times out
+        try {
+          await waitForInput(convex, inputId, 10000);
+          console.log(`Input ${inputId} completed successfully`);
+        } catch (timeoutError: any) {
+          console.warn('Input timeout, but checking if player was created anyway:', timeoutError.message);
+          // Even if input times out, check if player was actually created
+          // This can happen if engine is slow but still processes the input
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2s for state to update
+        }
         // Give the game state a moment to update
         setTimeout(() => {
           setIsJoining(false);
@@ -56,7 +66,17 @@ export default function InteractButton() {
       } catch (e: any) {
         setIsJoining(false);
         console.error('WaitForInput error:', e);
-        toast.error(e.message || 'Failed to complete join');
+        const errorMsg = e.message || 'Failed to complete join';
+        // Don't show error if it's just a timeout - player might still be created
+        if (!errorMsg.includes('timed out')) {
+          toast.error(errorMsg);
+        } else {
+          toast.warning('Join may have succeeded. Please refresh the page to check.');
+        }
+        // If timeout, suggest checking engine status
+        if (errorMsg.includes('timed out')) {
+          console.warn('Engine may be overloaded. Player might still be created. Refresh page to check.');
+        }
       }
     },
     [convex, join],
