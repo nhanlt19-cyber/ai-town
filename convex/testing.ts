@@ -9,7 +9,7 @@ import {
 } from './_generated/server';
 import { v } from 'convex/values';
 import schema from './schema';
-import { DELETE_BATCH_SIZE } from './constants';
+import { DELETE_BATCH_SIZE, ACTION_TIMEOUT } from './constants';
 import { kickEngine, startEngine, stopEngine } from './aiTown/main';
 import { insertInput } from './aiTown/insertInput';
 import { fetchEmbedding } from './util/llm';
@@ -198,5 +198,48 @@ export const testConvo = internalAction({
       'p:6' as GameId<'players'>,
     )) as any;
     return await a.readAll();
+  },
+});
+
+export const resetStuckOperations = mutation({
+  handler: async (ctx) => {
+    const { worldStatus } = await getDefaultWorld(ctx.db);
+    const world = await ctx.db.get(worldStatus.worldId);
+    if (!world) {
+      throw new Error(`World ${worldStatus.worldId} not found`);
+    }
+    
+    const now = Date.now();
+    const ACTION_TIMEOUT = 120_000; // 2 minutes
+    let resetCount = 0;
+    
+    // Check each agent for stuck operations
+    const updatedAgents = world.agents.map((agent) => {
+      if (agent.inProgressOperation) {
+        const operationAge = now - agent.inProgressOperation.started;
+        if (operationAge > ACTION_TIMEOUT) {
+          console.log(
+            `Resetting stuck operation for agent ${agent.id}: ` +
+            `${agent.inProgressOperation.name} (started ${Math.round(operationAge / 1000)}s ago)`
+          );
+          resetCount++;
+          // Remove inProgressOperation
+          const { inProgressOperation, ...rest } = agent;
+          return rest;
+        }
+      }
+      return agent;
+    });
+    
+    if (resetCount > 0) {
+      // Update world with reset agents
+      await ctx.db.patch(worldStatus.worldId, {
+        agents: updatedAgents,
+      });
+      console.log(`Reset ${resetCount} stuck agent operation(s)`);
+      return { resetCount, message: `Reset ${resetCount} stuck operation(s)` };
+    } else {
+      return { resetCount: 0, message: 'No stuck operations found' };
+    }
   },
 });
